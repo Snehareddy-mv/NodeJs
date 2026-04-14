@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: user-management-api
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      MONGO_URL: "mongodb+srv://username:test%40123@cluster0.0nkifbh.mongodb.net/test"
+      JWT_SECRET: "sneha-reddy"
+      CLOUDINARY_CLOUD_NAME: "dcnoptzwd"
+      CLOUDINARY_API_KEY: "398233333999458"
+      CLOUDINARY_API_SECRET: "Vnd21Dj0vosmymUAowQFOglZCSs"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

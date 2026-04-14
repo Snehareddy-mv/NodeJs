@@ -1,0 +1,31 @@
+const express = require("express");
+const cors = require("cors");
+const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+const { limiter } = require("./middlewares/rateLimiter");
+const { swaggerUi, specs } = require('./config/swagger');
+const errorHandler = require("./middlewares/errorHandler");
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+// Rate limiting - disable in test environment
+const isTestEnv = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+console.log('NODE_ENV:', process.env.NODE_ENV, 'JEST_WORKER_ID:', process.env.JEST_WORKER_ID, 'Rate limiter active:', !isTestEnv);
+
+if (!isTestEnv) {
+  app.use('/api', limiter);
+}
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use("/api/users", userRoutes);
+
+// Global error handler (MUST BE LAST)
+app.use(errorHandler);
+
+module.exports = app;
