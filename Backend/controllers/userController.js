@@ -12,6 +12,7 @@ const getallUsers = asyncHandler(async (req, res) => {
   }
 
   
+  //calculating excluded records
   const skip=(page-1)*limit;
 
   const users = await User.find().select("-password -refreshToken").skip(skip).limit(limit);

@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const channelRoutes = require("./routes/channelRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 const { limiter } = require("./middlewares/rateLimiter");
 const { swaggerUi, specs } = require('./config/swagger');
 const errorHandler = require("./middlewares/errorHandler");
@@ -24,6 +26,8 @@ if (!isTestEnv) {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/channels", channelRoutes);
+app.use("/api/messages", messageRoutes);
 
 // Global error handler (MUST BE LAST)
 app.use(errorHandler);
