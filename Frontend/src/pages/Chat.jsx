@@ -23,6 +23,13 @@ function Chat() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  
+  // AI Assistant states
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiHistory, setAiHistory] = useState([]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -276,6 +283,61 @@ function Chat() {
     }
   };
 
+  const handleAskAI = async () => {
+    if (!aiPrompt.trim()) return;
+
+    setAiLoading(true);
+    const userMessage = aiPrompt;
+    setAiPrompt('');
+
+    try {
+      // Add user message to history
+      const newHistory = [...aiHistory, { role: 'user', content: userMessage }];
+      setAiHistory(newHistory);
+
+      const response = await messageAPI.askAI(userMessage, activeChannel?._id);
+      console.log('AI Response:', response.data);
+      
+      // The AI response is in response.data.data.content
+      const aiMessage = response.data.data.content;
+
+      // Add AI response to history
+      setAiHistory([...newHistory, { role: 'assistant', content: aiMessage }]);
+      setAiResponse(aiMessage);
+      toast.success('AI responded!');
+    } catch (error) {
+      console.error('AI error:', error);
+      console.error('Error details:', error.response?.data);
+      toast.error('Failed to get AI response');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleSummarizeConversation = async () => {
+    if (messages.length === 0) {
+      toast.error('No messages to summarize');
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const response = await messageAPI.askAI(
+        `Summarize the last ${Math.min(messages.length, 20)} messages in this conversation`,
+        activeChannel?._id
+      );
+      
+      setAiResponse(response.data.data.response);
+      setShowAIChat(true);
+      toast.success('Conversation summarized!');
+    } catch (error) {
+      console.error('Summarize error:', error);
+      toast.error('Failed to summarize conversation');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     socketService.disconnect();
     logout();
@@ -355,6 +417,12 @@ function Chat() {
                   <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>{activeChannel.description || 'No description'}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setShowAIChat(true)} style={{ padding: '0.5rem 1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600' }}>
+                    🤖 AI Assistant
+                  </button>
+                  <button onClick={handleSummarizeConversation} style={{ padding: '0.5rem 1rem', background: '#ec4899', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
+                    📝 Summarize
+                  </button>
                   <button onClick={loadPinnedMessages} style={{ padding: '0.5rem 1rem', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
                     📌 Pinned
                   </button>
@@ -554,6 +622,73 @@ function Chat() {
               </button>
               <button onClick={() => setShowInviteModal(false)} style={{ flex: 1, padding: '0.75rem', background: '#6b7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Chat Modal */}
+      {showAIChat && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', maxWidth: '700px', width: '90%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '2px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                🤖 AI Assistant
+              </h3>
+              <button onClick={() => { setShowAIChat(false); setAiHistory([]); }} style={{ padding: '0.5rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                Close
+              </button>
+            </div>
+
+            {/* AI Conversation History */}
+            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem', padding: '1rem', background: '#f9fafb', borderRadius: '8px', minHeight: '300px' }}>
+              {aiHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#6b7280', padding: '2rem' }}>
+                  <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>👋 Hello! I'm your AI assistant.</p>
+                  <p style={{ fontSize: '0.875rem' }}>Ask me anything about this conversation, or request help with:</p>
+                  <ul style={{ listStyle: 'none', padding: 0, marginTop: '1rem' }}>
+                    <li>📝 Summarizing conversations</li>
+                    <li>💡 Generating ideas</li>
+                    <li>🔍 Analyzing messages</li>
+                    <li>✍️ Drafting responses</li>
+                  </ul>
+                </div>
+              ) : (
+                aiHistory.map((msg, idx) => (
+                  <div key={idx} style={{ marginBottom: '1rem', padding: '1rem', background: msg.role === 'user' ? '#dbeafe' : 'white', borderRadius: '8px', borderLeft: `4px solid ${msg.role === 'user' ? '#3b82f6' : '#8b5cf6'}` }}>
+                    <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: msg.role === 'user' ? '#1e40af' : '#6b21a8' }}>
+                      {msg.role === 'user' ? '👤 You' : '🤖 AI Assistant'}
+                    </div>
+                    <div style={{ color: '#374151', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                  </div>
+                ))
+              )}
+              {aiLoading && (
+                <div style={{ padding: '1rem', background: 'white', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#6b21a8' }}>🤖 AI Assistant</div>
+                  <div style={{ color: '#6b7280' }}>Thinking... 💭</div>
+                </div>
+              )}
+            </div>
+
+            {/* AI Input */}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAskAI()}
+                placeholder="Ask me anything..."
+                disabled={aiLoading}
+                style={{ flex: 1, padding: '0.75rem', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '1rem' }}
+              />
+              <button 
+                onClick={handleAskAI} 
+                disabled={aiLoading || !aiPrompt.trim()}
+                style={{ padding: '0.75rem 1.5rem', background: aiLoading ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', cursor: aiLoading ? 'not-allowed' : 'pointer', fontWeight: '600' }}
+              >
+                {aiLoading ? 'Thinking...' : 'Send'}
               </button>
             </div>
           </div>

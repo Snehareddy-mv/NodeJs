@@ -127,11 +127,13 @@ const getDirectMessages = asyncHandler(async (req, res) => {
 });
 
 const askAI = asyncHandler(async (req, res) => {
-  const { question, channelId } = req.body;
+  const { prompt, question, channelId } = req.body;
   const userId = req.currentUser.id;
 
-  if (!question) {
-    throw new AppError("Question is required", 400);
+  const userPrompt = prompt || question;
+
+  if (!userPrompt) {
+    throw new AppError("Prompt is required", 400);
   }
 
   let conversationHistory = [];
@@ -148,7 +150,9 @@ const askAI = asyncHandler(async (req, res) => {
     }));
   }
 
-  const aiResponse = await aiService.generateResponse(question, conversationHistory);
+  const aiResponse = await aiService.generateResponse(userPrompt, conversationHistory);
+  
+  console.log("✅ AI Response generated:", aiResponse.substring(0, 100));
 
   const aiMessage = await Message.create({
     content: aiResponse,
@@ -159,6 +163,16 @@ const askAI = asyncHandler(async (req, res) => {
   });
 
   await aiMessage.populate('sender', 'name email profileImage');
+  
+  console.log("✅ AI Message saved to DB:", aiMessage._id);
+  console.log("✅ Sending response to frontend...");
+
+  // Emit the AI message via Socket.io for real-time update
+  const io = req.app.get('io');
+  if (io && channelId) {
+    console.log("✅ Emitting AI message via Socket.io to channel:", channelId);
+    io.to(channelId).emit('message:new', aiMessage);
+  }
 
   res.status(200).json({
     success: true,
