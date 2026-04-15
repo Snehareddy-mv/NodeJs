@@ -420,9 +420,6 @@ function Chat() {
                   <button onClick={() => setShowAIChat(true)} style={{ padding: '0.5rem 1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600' }}>
                     🤖 AI Assistant
                   </button>
-                  <button onClick={handleSummarizeConversation} style={{ padding: '0.5rem 1rem', background: '#ec4899', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
-                    📝 Summarize
-                  </button>
                   <button onClick={loadPinnedMessages} style={{ padding: '0.5rem 1rem', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
                     📌 Pinned
                   </button>
