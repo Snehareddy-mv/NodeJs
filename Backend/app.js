@@ -14,7 +14,7 @@ app.use(express.json());
 // CORS configuration for production and development
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://your-frontend-app.onrender.com'] 
+    ? ['https://chat-ai-application-frontend.onrender.com', process.env.FRONTEND_URL] 
     : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
