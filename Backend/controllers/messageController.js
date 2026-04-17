@@ -29,7 +29,7 @@ const sendMessage = asyncHandler(async (req, res) => {
       throw new AppError("Channel not found", 404);
     }
 
-    if (!channel.members.some(member => member.toString() === senderId)) {
+    if (!channel.members.some((member) => member.toString() === senderId)) {
       throw new AppError("You are not a member of this channel", 403);
     }
 
@@ -41,10 +41,10 @@ const sendMessage = asyncHandler(async (req, res) => {
   }
 
   const message = await Message.create(messageData);
-  await message.populate('sender', 'name email profileImage');
+  await message.populate("sender", "name email profileImage");
 
   if (channelId) {
-    await message.populate('channel', 'name');
+    await message.populate("channel", "name");
   }
 
   res.status(201).json({
@@ -64,14 +64,17 @@ const getChannelMessages = asyncHandler(async (req, res) => {
     throw new AppError("Channel not found", 404);
   }
 
-  if (channel.isPrivate && !channel.members.some(member => member.toString() === userId)) {
+  if (
+    channel.isPrivate &&
+    !channel.members.some((member) => member.toString() === userId)
+  ) {
     throw new AppError("Access denied to private channel", 403);
   }
 
   const skip = (page - 1) * limit;
 
   const messages = await Message.find({ channel: channelId })
-    .populate('sender', 'name email profileImage')
+    .populate("sender", "name email profileImage")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -102,8 +105,8 @@ const getDirectMessages = asyncHandler(async (req, res) => {
       { sender: userId, receiver: currentUserId },
     ],
   })
-    .populate('sender', 'name email profileImage')
-    .populate('receiver', 'name email profileImage')
+    .populate("sender", "name email profileImage")
+    .populate("receiver", "name email profileImage")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -137,21 +140,46 @@ const askAI = asyncHandler(async (req, res) => {
   }
 
   let conversationHistory = [];
-  
-  if (channelId) {
-    const recentMessages = await Message.find({ channel: channelId })
-      .populate('sender', 'name')
-      .sort({ createdAt: -1 })
-      .limit(10);
 
-    conversationHistory = recentMessages.reverse().map(msg => ({
-      role: msg.isAIMessage ? 'model' : 'user',
-      content: `${msg.sender.name}: ${msg.content}`,
-    }));
+  if (channelId) {
+   const recentMessages = await Message.find({ channel: channelId })
+  .populate("sender", "_id")   // ✅ IMPORTANT
+  .sort({ createdAt: -1 })
+  .limit(20); // 🔥 increase history
+
+  conversationHistory = recentMessages
+  .reverse()
+  .filter((msg) => msg.content && msg.content.trim() !== "")
+  .map((msg) => {
+    let role;
+
+    // ✅ 1. AI messages
+    if (msg.isAIMessage === true) {
+      role = "assistant";
+    }
+
+    // ✅ 2. If sender matches current user
+    else if (String(msg.sender) === String(userId) || msg.sender?._id?.toString() === String(userId)) {
+      role = "user";
+    }
+
+    // ✅ 3. Everything else = assistant
+    else {
+      role = "assistant";
+    }
+
+    return {
+      role,
+      content: msg.content.trim(),
+    };
+  });
   }
 
-  const aiResponse = await aiService.generateResponse(userPrompt, conversationHistory);
-  
+  const aiResponse = await aiService.generateResponse(
+    userPrompt,
+    conversationHistory,
+  );
+
   console.log("✅ AI Response generated:", aiResponse.substring(0, 100));
 
   const aiMessage = await Message.create({
@@ -162,16 +190,16 @@ const askAI = asyncHandler(async (req, res) => {
     isAIMessage: true,
   });
 
-  await aiMessage.populate('sender', 'name email profileImage');
-  
+  await aiMessage.populate("sender", "name email profileImage");
+
   console.log("✅ AI Message saved to DB:", aiMessage._id);
   console.log("✅ Sending response to frontend...");
 
   // Emit the AI message via Socket.io for real-time update
-  const io = req.app.get('io');
+  const io = req.app.get("io");
   if (io && channelId) {
     console.log("✅ Emitting AI message via Socket.io to channel:", channelId);
-    io.to(channelId).emit('message:new', aiMessage);
+    io.to(channelId).emit("message:new", aiMessage);
   }
 
   res.status(200).json({
@@ -190,12 +218,12 @@ const summarizeConversation = asyncHandler(async (req, res) => {
     throw new AppError("Channel not found", 404);
   }
 
-  if (!channel.members.some(member => member.toString() === userId)) {
+  if (!channel.members.some((member) => member.toString() === userId)) {
     throw new AppError("You are not a member of this channel", 403);
   }
 
   const messages = await Message.find({ channel: channelId })
-    .populate('sender', 'name')
+    .populate("sender", "name")
     .sort({ createdAt: -1 })
     .limit(50);
 
@@ -274,9 +302,9 @@ const editMessage = asyncHandler(async (req, res) => {
   message.editedAt = Date.now();
   await message.save();
 
-  await message.populate('sender', 'name email profileImage');
+  await message.populate("sender", "name email profileImage");
   if (message.channel) {
-    await message.populate('channel', 'name');
+    await message.populate("channel", "name");
   }
 
   res.status(200).json({
@@ -290,7 +318,7 @@ const pinMessage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.currentUser.id;
 
-  const message = await Message.findById(id).populate('channel');
+  const message = await Message.findById(id).populate("channel");
   if (!message) {
     throw new AppError("Message not found", 404);
   }
@@ -300,8 +328,10 @@ const pinMessage = asyncHandler(async (req, res) => {
   }
 
   const channel = await Channel.findById(message.channel._id);
-  const isAdmin = channel.admins.some(admin => admin.toString() === userId);
-  const isModerator = channel.moderators.some(mod => mod.toString() === userId);
+  const isAdmin = channel.admins.some((admin) => admin.toString() === userId);
+  const isModerator = channel.moderators.some(
+    (mod) => mod.toString() === userId,
+  );
 
   if (!isAdmin && !isModerator) {
     throw new AppError("Only admins and moderators can pin messages", 403);
@@ -312,8 +342,8 @@ const pinMessage = asyncHandler(async (req, res) => {
   message.pinnedAt = Date.now();
   await message.save();
 
-  await message.populate('sender', 'name email profileImage');
-  await message.populate('pinnedBy', 'name');
+  await message.populate("sender", "name email profileImage");
+  await message.populate("pinnedBy", "name");
 
   res.status(200).json({
     success: true,
@@ -326,14 +356,16 @@ const unpinMessage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.currentUser.id;
 
-  const message = await Message.findById(id).populate('channel');
+  const message = await Message.findById(id).populate("channel");
   if (!message) {
     throw new AppError("Message not found", 404);
   }
 
   const channel = await Channel.findById(message.channel._id);
-  const isAdmin = channel.admins.some(admin => admin.toString() === userId);
-  const isModerator = channel.moderators.some(mod => mod.toString() === userId);
+  const isAdmin = channel.admins.some((admin) => admin.toString() === userId);
+  const isModerator = channel.moderators.some(
+    (mod) => mod.toString() === userId,
+  );
 
   if (!isAdmin && !isModerator) {
     throw new AppError("Only admins and moderators can unpin messages", 403);
@@ -360,7 +392,7 @@ const searchMessages = asyncHandler(async (req, res) => {
   }
 
   const searchQuery = {
-    content: { $regex: query, $options: 'i' },
+    content: { $regex: query, $options: "i" },
   };
 
   if (channelId) {
@@ -369,23 +401,20 @@ const searchMessages = asyncHandler(async (req, res) => {
       throw new AppError("Channel not found", 404);
     }
 
-    if (!channel.members.some(member => member.toString() === userId)) {
+    if (!channel.members.some((member) => member.toString() === userId)) {
       throw new AppError("You are not a member of this channel", 403);
     }
 
     searchQuery.channel = channelId;
   } else {
-    searchQuery.$or = [
-      { sender: userId },
-      { receiver: userId },
-    ];
+    searchQuery.$or = [{ sender: userId }, { receiver: userId }];
   }
 
   const skip = (page - 1) * limit;
 
   const messages = await Message.find(searchQuery)
-    .populate('sender', 'name email profileImage')
-    .populate('channel', 'name')
+    .populate("sender", "name email profileImage")
+    .populate("channel", "name")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -415,7 +444,7 @@ const getPinnedMessages = asyncHandler(async (req, res) => {
     throw new AppError("Channel not found", 404);
   }
 
-  if (!channel.members.some(member => member.toString() === userId)) {
+  if (!channel.members.some((member) => member.toString() === userId)) {
     throw new AppError("You are not a member of this channel", 403);
   }
 
@@ -423,8 +452,8 @@ const getPinnedMessages = asyncHandler(async (req, res) => {
     channel: channelId,
     isPinned: true,
   })
-    .populate('sender', 'name email profileImage')
-    .populate('pinnedBy', 'name')
+    .populate("sender", "name email profileImage")
+    .populate("pinnedBy", "name")
     .sort({ pinnedAt: -1 });
 
   res.status(200).json({

@@ -1,86 +1,117 @@
 const aiService = {
   async generateResponse(prompt, conversationHistory = []) {
-    console.log("✅ Using Smart AI Assistant...");
+    console.log("✅ Using OpenRouter LLM (LLaMA-3)...");
     console.log("Prompt:", prompt);
-    console.log("Conversation history length:", conversationHistory.length);
-    
-    // Enhanced rule-based AI with context awareness
-    const lowerPrompt = prompt.toLowerCase().trim();
-    
-    // Greetings
-    if (lowerPrompt.match(/^(hi|hello|hey|greetings|good morning|good afternoon|good evening)$/)) {
-      return "Hello! 👋 I'm your AI assistant. I can help you with:\n• Answering questions about your conversations\n• Summarizing chat history\n• Providing suggestions and ideas\n• General assistance\n\nWhat would you like to know?";
-    }
-    
-    // How are you
-    if (lowerPrompt.includes('how are you') || lowerPrompt.includes('how r u')) {
-      return "I'm doing great, thank you for asking! 😊 I'm here and ready to help you. What can I assist you with today?";
-    }
-    
-    // Summarization requests
-    if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
-      if (conversationHistory.length > 0) {
-        const recentMessages = conversationHistory.slice(-10);
-        const topics = new Set();
-        recentMessages.forEach(msg => {
-          const words = msg.content.toLowerCase().split(' ');
-          words.forEach(word => {
-            if (word.length > 5 && !['message', 'channel', 'please'].includes(word)) {
-              topics.add(word);
-            }
-          });
-        });
-        
-        return `📝 **Conversation Summary:**\n\nThe recent discussion covered ${recentMessages.length} messages${topics.size > 0 ? ` discussing topics like: ${Array.from(topics).slice(0, 5).join(', ')}` : ''}.\n\nKey points:\n• ${recentMessages.length} messages exchanged\n• Active conversation flow\n• Multiple participants engaged\n\nWould you like me to provide more specific details?`;
+
+    try {
+      const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+      if (!OPENROUTER_API_KEY) {
+        throw new Error("❌ Missing OpenRouter API Key");
       }
-      return "I can help summarize conversations! However, I need some message history to work with. Please send some messages first, then ask me to summarize.";
+
+      // 🧠 STEP 1: Sort history (important for memory)
+      if (conversationHistory.length > 0) {
+        conversationHistory.sort(
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+        );
+      }
+
+      // 🧠 STEP 2: System message
+      const messages = [
+        {
+          role: "system",
+          content:
+            "You are a smart, friendly AI assistant. Speak naturally like ChatGPT. Be helpful, clear, and conversational.",
+        },
+      ];
+
+      // 🧠 STEP 3: Clean + limit history
+      const history = conversationHistory;
+
+      const cleanedHistory = history.filter(
+        (msg) =>
+          msg.content &&
+          msg.content.trim() !== "" &&
+          msg.content !== prompt
+      );
+
+      cleanedHistory.forEach((msg) => {
+        messages.push({
+         role: msg.isAIMessage === true ? "assistant" : "user",
+          content: msg.content
+            .replace(/^admin\d+:\s*/, "")
+            .replace(/^user\d+:\s*/, "")
+            .trim(),
+        });
+      });
+
+      // 🧠 STEP 4: Add current user message
+      messages.push({
+        role: "user",
+        content: prompt,
+      });
+
+      // 🔍 DEBUG
+      console.log("📨 Messages sent to LLM:", JSON.stringify(messages, null, 2));
+
+      // 🚀 API CALL
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "meta-llama/llama-3-8b-instruct",
+            messages,
+            temperature: 0.8,
+            max_tokens: 500,
+            top_p: 0.9,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ OpenRouter API error:", errorText);
+        throw new Error("LLM API failed");
+      }
+
+      const data = await response.json();
+
+      const aiResponse =
+        data?.choices?.[0]?.message?.content ||
+        "I'm not sure how to respond.";
+
+      console.log("✅ AI Response:", aiResponse);
+
+      return aiResponse.trim();
+    } catch (error) {
+      console.error("❌ LLM Error:", error.message);
+      return "⚠️ AI is temporarily unavailable. Try again.";
     }
-    
-    // Help requests
-    if (lowerPrompt.includes('help') || lowerPrompt.includes('what can you do')) {
-      return "🤖 **AI Assistant Capabilities:**\n\n✅ **I can help you with:**\n• Answering questions about your chats\n• Summarizing conversations\n• Providing suggestions and ideas\n• Explaining features\n• General assistance\n\n💡 **Try asking me:**\n• 'Summarize this conversation'\n• 'What are the main topics discussed?'\n• 'Give me 3 ideas for...'\n• Any question you have!\n\nHow can I assist you?";
-    }
-    
-    // Ideas/suggestions
-    if (lowerPrompt.includes('idea') || lowerPrompt.includes('suggest')) {
-      return "💡 **Here are some suggestions:**\n\n1. **Organize your channels** - Create separate channels for different topics\n2. **Use pinned messages** - Pin important information for easy access\n3. **Leverage search** - Quickly find past conversations\n4. **Invite team members** - Use invite codes to grow your community\n\nWould you like more specific suggestions for something?";
-    }
-    
-    // Thank you
-    if (lowerPrompt.includes('thank') || lowerPrompt.includes('thanks')) {
-      return "You're very welcome! 😊 I'm always here to help. Feel free to ask me anything else!";
-    }
-    
-    // Goodbye
-    if (lowerPrompt.match(/^(bye|goodbye|see you|later)$/)) {
-      return "Goodbye! 👋 Feel free to come back anytime you need assistance. Have a great day!";
-    }
-    
-    // Questions about features
-    if (lowerPrompt.includes('how to') || lowerPrompt.includes('how do i')) {
-      return "I'd be happy to help! 📚\n\n**Common actions:**\n• **Edit messages** - Click the ✏️ button on your own messages\n• **Pin messages** - Admins/moderators can click 📌 to pin important messages\n• **Search** - Use the 🔍 Search button to find messages\n• **Invite users** - Click 🔗 Invite to generate an invite code\n\nWhat specific feature would you like to know more about?";
-    }
-    
-    // Generic intelligent response
-    const responses = [
-      `That's an interesting question! Based on what you're asking about "${prompt}", I can help you explore this topic. Could you provide more details?`,
-      `I understand you're asking about "${prompt}". Let me help you with that! What specific aspect would you like to know more about?`,
-      `Great question! Regarding "${prompt}", I'm here to assist. Would you like me to:\n• Provide general information\n• Give specific examples\n• Suggest related topics`,
-      `I'm here to help with "${prompt}"! To give you the best answer, could you tell me a bit more about what you're looking for?`
-    ];
-    
-    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-    return randomResponse;
   },
 
+  // ✅ SUMMARY
   async summarizeConversation(messages) {
     try {
-      const conversationText = messages.map(msg => 
-        `${msg.sender.name}: ${msg.content}`
-      ).join('\n');
+      const cleanMessages = messages.map((msg) => ({
+        role: msg.isAIMessage ? "assistant" : "user",
+        content: msg.content
+          .replace(/^admin\d+:\s*/, "")
+          .replace(/^user\d+:\s*/, "")
+          .trim(),
+      }));
 
-      const prompt = `Summarize the following conversation in 2-3 sentences:\n\n${conversationText}`;
-      
+      const prompt = `
+Summarize this conversation in 2-3 sentences:
+
+${cleanMessages.map((m) => `${m.role}: ${m.content}`).join("\n")}
+`;
+
       return await this.generateResponse(prompt);
     } catch (error) {
       console.error("Summarization Error:", error);
@@ -88,26 +119,41 @@ const aiService = {
     }
   },
 
+  // ✅ SENTIMENT (STRICT OUTPUT)
   async analyzeSentiment(text) {
     try {
-      const prompt = `Analyze the sentiment of this message and respond with only one word: positive, negative, or neutral.\n\nMessage: "${text}"`;
-      
+      const prompt = `
+Classify sentiment in ONE word: positive, negative, or neutral.
+
+Text: "${text}"
+Answer:
+`;
+
       const sentiment = await this.generateResponse(prompt);
-      return sentiment.trim().toLowerCase();
+
+      return sentiment.toLowerCase().trim();
     } catch (error) {
-      console.error("Sentiment Analysis Error:", error);
+      console.error("Sentiment Error:", error);
       return "neutral";
     }
   },
 
+  // ✅ SMART REPLY
   async generateSmartReply(message, context = "") {
     try {
-      const prompt = `Generate a brief, professional reply to this message${context ? ` in the context of: ${context}` : ''}:\n\n"${message}"\n\nProvide only the reply text, no explanations.`;
-      
+      const prompt = `
+Write a short, professional reply.
+
+Message: "${message}"
+${context ? `Context: ${context}` : ""}
+
+Reply:
+`;
+
       return await this.generateResponse(prompt);
     } catch (error) {
       console.error("Smart Reply Error:", error);
-      throw new Error("Failed to generate smart reply");
+      throw new Error("Failed to generate reply");
     }
   },
 };
