@@ -28,9 +28,9 @@ function Login() {
 
       setAccessToken(accessToken);
       setUser(user);
-      
+
       socketService.connect(accessToken);
-      
+
       toast.success('Login successful!');
       navigate('/chat');
     } catch (error) {
@@ -46,7 +46,7 @@ function Login() {
         <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', textAlign: 'center' }}>
           Login to ChatGenius
         </h2>
-        
+
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
