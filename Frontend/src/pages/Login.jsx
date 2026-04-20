@@ -82,7 +82,7 @@ function Login() {
             style={{
               width: '100%',
               padding: '0.75rem',
-              background: loading ? '#9ca3af' : '#3b82f6',
+              background: loading ? '#7ec8a3' : '#2f855a',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
@@ -96,7 +96,7 @@ function Login() {
 
         <p style={{ marginTop: '1rem', textAlign: 'center', color: '#6b7280' }}>
           Don't have an account?{' '}
-          <Link to="/register" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+          <Link to="/register" style={{ color: '#2f855a', textDecoration: 'none' }}>
             Register
           </Link>
         </p>
