@@ -13,7 +13,7 @@ const aiService = {
       // 🧠 STEP 1: Sort history (important for memory)
       if (conversationHistory.length > 0) {
         conversationHistory.sort(
-          (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+          (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
         );
       }
 
@@ -53,14 +53,12 @@ Be friendly, conversational, and clear in your responses. Use simple terminology
 
       const cleanedHistory = history.filter(
         (msg) =>
-          msg.content &&
-          msg.content.trim() !== "" &&
-          msg.content !== prompt
+          msg.content && msg.content.trim() !== "" && msg.content !== prompt,
       );
 
       cleanedHistory.forEach((msg) => {
         messages.push({
-         role: msg.isAIMessage === true ? "assistant" : "user",
+          role: msg.isAIMessage === true ? "assistant" : "user",
           content: msg.content
             .replace(/^admin\d+:\s*/, "")
             .replace(/^user\d+:\s*/, "")
@@ -75,7 +73,10 @@ Be friendly, conversational, and clear in your responses. Use simple terminology
       });
 
       // 🔍 DEBUG
-      console.log("📨 Messages sent to LLM:", JSON.stringify(messages, null, 2));
+      console.log(
+        "📨 Messages sent to LLM:",
+        JSON.stringify(messages, null, 2),
+      );
 
       // 🚀 API CALL
       const response = await fetch(
@@ -93,7 +94,7 @@ Be friendly, conversational, and clear in your responses. Use simple terminology
             max_tokens: 500,
             top_p: 0.9,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -105,8 +106,7 @@ Be friendly, conversational, and clear in your responses. Use simple terminology
       const data = await response.json();
 
       const aiResponse =
-        data?.choices?.[0]?.message?.content ||
-        "I'm not sure how to respond.";
+        data?.choices?.[0]?.message?.content || "I'm not sure how to respond.";
 
       console.log("✅ AI Response:", aiResponse);
 
