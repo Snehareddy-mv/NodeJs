@@ -75,6 +75,7 @@ const getChannelMessages = asyncHandler(async (req, res) => {
 
   const messages = await Message.find({ channel: channelId })
     .populate("sender", "name email profileImage")
+    .populate({ path: "replyTo", populate: { path: "sender", select: "name" } })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));

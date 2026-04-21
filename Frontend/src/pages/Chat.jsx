@@ -46,6 +46,7 @@ function Chat() {
   } = useStore();
 
   const [messageText, setMessageText] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -222,10 +223,13 @@ function Chat() {
   const handleSendSmartReply = (text) => {
     if (!activeChannel || !text.trim()) return;
     setSmartReplies([]);
+    const replyToId = replyingTo?._id;
+    setReplyingTo(null);
     socketService.sendMessage({
       content: text,
       channelId: activeChannel._id,
       messageType: "text",
+      replyTo: replyToId,
     });
   };
 
@@ -239,13 +243,16 @@ function Chat() {
     if (aiMatch) {
       const prompt = aiMatch[2].trim();
       setMessageText("");
+      setReplyingTo(null);
       setShowAIChat(true);
       await handleAskAIWithPrompt(prompt);
       return;
     }
 
     const messageContent = messageText;
+    const replyToId = replyingTo?._id;
     setMessageText("");
+    setReplyingTo(null);
     setLoading(true);
 
     try {
@@ -253,6 +260,7 @@ function Chat() {
         content: messageContent,
         channelId: activeChannel._id,
         messageType: "text",
+        replyTo: replyToId,
       });
     } catch (error) {
       toast.error("Failed to send message");
@@ -585,7 +593,7 @@ function Chat() {
               backgroundClip: "text",
             }}
           >
-            ChatGenius
+            FluxChat
           </h1>
           <p
             style={{
@@ -602,29 +610,26 @@ function Chat() {
         <div style={{ padding: "0.75rem 1rem", borderBottom: `1px solid ${SIDEBAR_BORDER}` }}>
           <button
             onClick={() => { setShowSearch(false); setShowAIChat(true); }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#252d3d"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = SIDEBAR_CARD; }}
             style={{
               width: "100%",
-              padding: "0.65rem",
-              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
-              border: "none",
-              borderRadius: "12px",
-              color: "#ffffff",
+              padding: "0.55rem 0.75rem",
+              background: SIDEBAR_CARD,
+              border: `1px solid ${SIDEBAR_BORDER}`,
+              borderRadius: "10px",
+              color: SIDEBAR_TEXT,
               cursor: "pointer",
-              fontWeight: "700",
-              fontSize: "0.9rem",
-              boxShadow: "0 4px 12px rgba(99,102,241,0.35)",
-              transition: "all 0.2s",
+              fontWeight: "600",
+              fontSize: "0.95rem",
+              transition: "background 0.2s",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
+              gap: "8px",
             }}
           >
-            🤖 AI Assistant
+            🤖 Fluxy
           </button>
-          <p style={{ fontSize: "0.7rem", color: SIDEBAR_SUBTEXT, textAlign: "center", margin: "0.4rem 0 0", lineHeight: "1.3" }}>
-            Summarize · Translate · Draft · Ask
-          </p>
         </div>
 
         <div style={{ padding: "1rem" }}>
@@ -632,7 +637,7 @@ function Chat() {
             onClick={() => setShowCreateChannel(!showCreateChannel)}
             style={{
               width: "100%",
-              padding: "0.6rem",
+              padding: "0.6rem 0.75rem",
               background: SIDEBAR_CARD,
               border: `1px solid ${SIDEBAR_BORDER}`,
               borderRadius: "12px",
@@ -641,6 +646,7 @@ function Chat() {
               fontWeight: "600",
               boxShadow: darkSoftShadow,
               transition: "all 0.2s",
+              textAlign: "left",
             }}
           >
             + New Channel
@@ -689,6 +695,7 @@ function Chat() {
         </div>
 
         <div
+          className="hide-scrollbar"
           style={{
             flex: 1,
             overflowY: "auto",
@@ -740,7 +747,7 @@ function Chat() {
                 fontWeight: activeChannel?._id === channel._id ? "600" : "500",
               }}
             >
-              # {channel.name}
+              {channel.name}
             </div>
           ))}
         </div>
@@ -854,10 +861,10 @@ function Chat() {
           <>
             <div
               style={{
-                padding: "1rem 1.5rem",
-                background: CARD,
-                boxShadow: "none",
-                borderBottom: "1px solid #e5e7eb",
+                padding: "0.85rem 1.5rem",
+                background: "linear-gradient(135deg, #f0f4ff, #e8edf7)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                borderBottom: "1px solid #d1d9ef",
               }}
             >
               <div
@@ -871,44 +878,27 @@ function Chat() {
                   <h2
                     style={{
                       fontSize: "1.25rem",
-                      fontWeight: "bold",
+                      fontWeight: "700",
                       margin: 0,
-                      color: "#2d3748",
+                      color: "#1a202c",
+                      letterSpacing: "0.01em",
                     }}
                   >
-                    <span style={{ color: "#0891b2" }}>#</span>
-                    {activeChannel.name}
+                    {activeChannel.name.replace(/\b\w/g, (c) => c.toUpperCase())}
                   </h2>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "#718096",
-                      margin: "0.25rem 0 0 0",
-                    }}
-                  >
-                    {activeChannel.description || "No description"}
-                  </p>
+                  {activeChannel.description && (
+                    <p
+                      style={{
+                        fontSize: "0.875rem",
+                        color: "#718096",
+                        margin: "0.25rem 0 0 0",
+                      }}
+                    >
+                      {activeChannel.description}
+                    </p>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: "0.6rem" }}>
-                  <button
-                    onClick={() => {
-                      setShowSearch(false);
-                      setShowAIChat(true);
-                    }}
-                    style={{
-                      padding: "0.5rem 1rem",
-                      background: "linear-gradient(135deg, #2f855a, #22543d)",
-                      color: "#ffffff",
-                      border: "none",
-                      borderRadius: "10px",
-                      cursor: "pointer",
-                      fontSize: "0.875rem",
-                      fontWeight: "600",
-                      boxShadow: "none",
-                    }}
-                  >
-                    🤖 AI
-                  </button>
                   <button
                     onClick={handleSummarizeConversation}
                     disabled={aiLoading}
@@ -1085,6 +1075,22 @@ function Chat() {
                       )}
                     </div>
                     <div style={{ display: "flex", gap: "0.4rem" }}>
+                      <button
+                        onClick={() => setReplyingTo(message)}
+                        title="Reply"
+                        style={{
+                          padding: "0.25rem 0.6rem",
+                          background: CARD,
+                          color: "#6366f1",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "0.75rem",
+                          boxShadow: "none",
+                        }}
+                      >
+                        ↩
+                      </button>
                       {message.sender._id === user.id && (
                         <button
                           onClick={() => {
@@ -1193,6 +1199,23 @@ function Chat() {
                     </div>
                   ) : (
                     <div>
+                      {/* Quoted/replied-to message */}
+                      {message.replyTo && (
+                        <div style={{
+                          borderLeft: "3px solid #6366f1",
+                          padding: "0.3rem 0.65rem",
+                          background: "#f0f4ff",
+                          borderRadius: "0 6px 6px 0",
+                          marginBottom: "0.5rem",
+                        }}>
+                          <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#4338ca", marginBottom: "0.1rem" }}>
+                            ↩ {message.replyTo.sender?.name || "Unknown"}
+                          </div>
+                          <div style={{ fontSize: "0.8rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "420px" }}>
+                            {message.replyTo.content}
+                          </div>
+                        </div>
+                      )}
                       {/* Message content: show accepted translation or original */}
                       <div style={{ color: "#2d3748", lineHeight: "1.5" }}>
                         {acceptedTranslations[message._id]
@@ -1443,6 +1466,34 @@ function Chat() {
                 </div>
               )}
 
+              {/* Reply preview strip */}
+              {replyingTo && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.6rem",
+                  background: "#eef2ff",
+                  border: "1px solid #c7d2fe",
+                  borderLeft: "3px solid #6366f1",
+                  borderRadius: "8px",
+                  padding: "0.4rem 0.8rem",
+                  marginBottom: "0.5rem",
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#4338ca" }}>
+                      ↩ Replying to {replyingTo.sender?.name}
+                    </div>
+                    <div style={{ fontSize: "0.8rem", color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {replyingTo.content}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setReplyingTo(null)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "1rem", padding: 0, flexShrink: 0 }}
+                  >✕</button>
+                </div>
+              )}
+
               <form
                 onSubmit={handleSendMessage}
                 style={{ display: "flex", gap: "0.6rem" }}
@@ -1451,7 +1502,7 @@ function Chat() {
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
-                    placeholder={`Message #${activeChannel.name}`}
+                    placeholder={replyingTo ? `Reply to ${replyingTo.sender?.name}...` : `Message ${activeChannel.name}`}
                     onFocus={(e) => (e.target.style.border = "1px solid #2f855a")}
                     onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
                     style={{
@@ -1511,7 +1562,7 @@ function Chat() {
                   color: "#2d3748",
                 }}
               >
-                Welcome to ChatGenius!
+                Welcome to FluxChat!
               </h2>
               <p>Select a channel to start chatting</p>
             </div>
@@ -1871,7 +1922,7 @@ function Chat() {
               <h3
                 style={{ fontSize: "1.5rem", fontWeight: "bold", color: TEXT }}
               >
-                🤖 AI Assistant
+                ⚡ Fluxy
               </h3>
               <button
                 onClick={() => {
@@ -1916,7 +1967,7 @@ function Chat() {
                   }}
                 >
                   <p style={{ fontSize: "1.125rem", marginBottom: "0.5rem" }}>
-                    👋 Hello! I'm your AI assistant.
+                    👋 Hello! I'm Fluxy, your platform assistant.
                   </p>
                   <p style={{ fontSize: "0.875rem" }}>
                     Ask me anything about this conversation, or request help
@@ -1954,7 +2005,7 @@ function Chat() {
                         color: msg.role === "user" ? "green" : TEXT,
                       }}
                     >
-                      {msg.role === "user" ? "👤 You" : "🤖 AI Assistant"}
+                      {msg.role === "user" ? "👤 You" : "⚡ Fluxy"}
                     </div>
                     <div
                       style={{
@@ -1985,7 +2036,7 @@ function Chat() {
                       color: TEXT,
                     }}
                   >
-                    🤖 AI Assistant
+                    ⚡ Fluxy
                   </div>
                   <div style={{ color: SUBTEXT }}>Thinking... 💭</div>
                 </div>

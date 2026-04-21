@@ -71,13 +71,14 @@ const socketHandler = (io) => {
 
     socket.on("message:send", async (data) => {
       try {
-        const { content, channelId, receiverId, messageType, fileUrl } = data;
+        const { content, channelId, receiverId, messageType, fileUrl, replyTo } = data;
 
         const messageData = {
           content,
           sender: socket.userId,
           messageType: messageType || "text",
           fileUrl,
+          replyTo: replyTo || null,
         };
 
         if (channelId) {
@@ -94,6 +95,7 @@ const socketHandler = (io) => {
 
         const message = await Message.create(messageData);
         await message.populate('sender', 'name email profileImage');
+        await message.populate({ path: 'replyTo', populate: { path: 'sender', select: 'name' } });
 
         if (channelId) {
           await message.populate('channel', 'name');
