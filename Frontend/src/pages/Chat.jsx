@@ -112,7 +112,6 @@ function Chat() {
     const handleMessagePinned = (message) => {
       console.log("📌 Message pinned:", message);
       updateMessage(message._id, message);
-      toast.success("Message pinned");
     };
     const btn = () => ({
       padding: "0.4rem 0.9rem",
@@ -130,7 +129,6 @@ function Chat() {
         pinnedBy: null,
         pinnedAt: null,
       });
-      toast.success("Message unpinned");
     };
 
     const handleMessageDeleted = (messageId) => {
