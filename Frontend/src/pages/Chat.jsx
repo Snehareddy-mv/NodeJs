@@ -67,6 +67,19 @@ function Chat() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState([]);
 
+  // Inline autocomplete states
+  const [typingSuggestion, setTypingSuggestion] = useState("");
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+
+  // Tone Rewrite states
+  const [showToneMenu, setShowToneMenu] = useState(false);
+  const [toneLoading, setToneLoading] = useState(false);
+
+  // Translation states
+  const [showTranslateFor, setShowTranslateFor] = useState(null);
+  const [pendingTranslations, setPendingTranslations] = useState({});
+  const [acceptedTranslations, setAcceptedTranslations] = useState({});
+
   useEffect(() => {
     if (!accessToken) {
       navigate("/login");
@@ -207,6 +220,16 @@ function Chat() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageText.trim() || !activeChannel) return;
+
+    // Route @ai or /ask to the AI assistant
+    const aiMatch = messageText.trim().match(/^(@ai|\/ask)\s+([\s\S]+)/i);
+    if (aiMatch) {
+      const prompt = aiMatch[2].trim();
+      setMessageText("");
+      setShowAIChat(true);
+      await handleAskAIWithPrompt(prompt);
+      return;
+    }
 
     const messageContent = messageText;
     setMessageText("");
@@ -384,29 +407,120 @@ function Chat() {
     }
   };
 
+  // AI helper: ask AI with a direct prompt (bypasses aiPrompt state)
+  const handleAskAIWithPrompt = async (prompt) => {
+    if (!prompt.trim()) return;
+    setAiLoading(true);
+    try {
+      const newHistory = [...aiHistory, { role: "user", content: prompt }];
+      setAiHistory(newHistory);
+      const response = await messageAPI.askAI(prompt, activeChannel?._id);
+      const aiMessage = response.data.data.content;
+      setAiHistory([...newHistory, { role: "assistant", content: aiMessage }]);
+    } catch (error) {
+      console.error("AI error:", error);
+      toast.error("AI failed to respond");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // Tone Rewrite: rewrite messageText in chosen tone
+  const handleToneRewrite = async (tone) => {
+    if (!messageText.trim()) {
+      toast.error("Type a message first to rewrite its tone");
+      return;
+    }
+    setShowToneMenu(false);
+    setToneLoading(true);
+    try {
+      const response = await messageAPI.askAI(
+        `Rewrite this message in a ${tone} tone. Respond with ONLY the rewritten message, no explanation: "${messageText}"`,
+        activeChannel?._id,
+      );
+      setMessageText(response.data.data.content);
+    } catch (error) {
+      console.error("Tone rewrite error:", error);
+      toast.error("Tone rewrite failed");
+    } finally {
+      setToneLoading(false);
+    }
+  };
+
+  // Translation: translate a single message into chosen language
+  const handleTranslate = async (msgId, content, lang) => {
+    setShowTranslateFor(null);
+    try {
+      const response = await messageAPI.askAI(
+        `Translate this message to ${lang}. Respond with ONLY the translated text, nothing else: "${content}"`,
+        activeChannel?._id,
+      );
+      setPendingTranslations((prev) => ({
+        ...prev,
+        [msgId]: { text: response.data.data.content, lang },
+      }));
+    } catch (error) {
+      console.error("Translation error:", error);
+      toast.error("Translation failed");
+    }
+  };
+
+  const handleAcceptTranslation = (msgId) => {
+    const pending = pendingTranslations[msgId];
+    if (!pending) return;
+    setAcceptedTranslations((prev) => ({ ...prev, [msgId]: pending }));
+    setPendingTranslations((prev) => { const n = { ...prev }; delete n[msgId]; return n; });
+  };
+
+  const handleRejectTranslation = (msgId) => {
+    setPendingTranslations((prev) => { const n = { ...prev }; delete n[msgId]; return n; });
+  };
+
+  const handleRevertTranslation = (msgId) => {
+    setAcceptedTranslations((prev) => { const n = { ...prev }; delete n[msgId]; return n; });
+  };
+
+  // Summarize conversation via AI chat modal
   const handleSummarizeConversation = async () => {
     if (messages.length === 0) {
       toast.error("No messages to summarize");
       return;
     }
-
-    setAiLoading(true);
-    try {
-      const response = await messageAPI.askAI(
-        `Summarize the last ${Math.min(messages.length, 20)} messages in this conversation`,
-        activeChannel?._id,
-      );
-
-      setAiResponse(response.data.data.response);
-      setShowAIChat(true);
-      toast.success("Conversation summarized!");
-    } catch (error) {
-      console.error("Summarize error:", error);
-      toast.error("Failed to summarize conversation");
-    } finally {
-      setAiLoading(false);
-    }
+    setShowAIChat(true);
+    const recentMessages = messages
+      .slice(-20)
+      .map((m) => `${m.sender?.name || "User"}: ${m.content}`)
+      .join("\n");
+    await handleAskAIWithPrompt(
+      `Please summarize this conversation in 3-5 bullet points:\n\n${recentMessages}`,
+    );
   };
+
+  // Debounced inline autocomplete: triggers 800ms after user stops typing
+  useEffect(() => {
+    if (messageText.length < 3 || !activeChannel) {
+      setTypingSuggestion("");
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSuggestionLoading(true);
+      try {
+        const response = await messageAPI.askAI(
+          `Complete this chat message naturally. Reply ONLY with the full completed message (max 15 words total, do not add quotes): ${messageText}`,
+          activeChannel?._id,
+        );
+        const suggestion = response.data.data.content?.trim().replace(/^"|"$/g, "") || "";
+        if (suggestion && suggestion.toLowerCase() !== messageText.toLowerCase()) {
+          setTypingSuggestion(suggestion);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setSuggestionLoading(false);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [messageText, activeChannel]);
 
   const handleLogout = () => {
     socketService.disconnect();
@@ -456,6 +570,35 @@ function Chat() {
             }}
           >
             {user?.name}
+          </p>
+        </div>
+
+        {/* 🤖 AI Assistant - Always Accessible in Navbar */}
+        <div style={{ padding: "0.75rem 1rem", borderBottom: `1px solid ${SIDEBAR_BORDER}` }}>
+          <button
+            onClick={() => { setShowSearch(false); setShowAIChat(true); }}
+            style={{
+              width: "100%",
+              padding: "0.65rem",
+              background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+              border: "none",
+              borderRadius: "12px",
+              color: "#ffffff",
+              cursor: "pointer",
+              fontWeight: "700",
+              fontSize: "0.9rem",
+              boxShadow: "0 4px 12px rgba(99,102,241,0.35)",
+              transition: "all 0.2s",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            🤖 AI Assistant
+          </button>
+          <p style={{ fontSize: "0.7rem", color: SIDEBAR_SUBTEXT, textAlign: "center", margin: "0.4rem 0 0", lineHeight: "1.3" }}>
+            Summarize · Translate · Draft · Ask
           </p>
         </div>
 
@@ -742,6 +885,25 @@ function Chat() {
                     🤖 AI
                   </button>
                   <button
+                    onClick={handleSummarizeConversation}
+                    disabled={aiLoading}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#e0e7ff")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#ffffff")}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      background: "#ffffff",
+                      border: "1px solid #c7d2fe",
+                      borderRadius: "10px",
+                      cursor: aiLoading ? "not-allowed" : "pointer",
+                      fontSize: "0.875rem",
+                      fontWeight: "600",
+                      boxShadow: "none",
+                      color: "#4338ca",
+                    }}
+                  >
+                    📝 Summarize
+                  </button>
+                  <button
                     onClick={() => {
                       setShowSearch(false); // ✅ close search
                       loadPinnedMessages(); // open pinned
@@ -1005,8 +1167,109 @@ function Chat() {
                       </button>
                     </div>
                   ) : (
-                    <div style={{ color: "#2d3748", lineHeight: "1.5" }}>
-                      {message.content}
+                    <div>
+                      {/* Message content: show accepted translation or original */}
+                      <div style={{ color: "#2d3748", lineHeight: "1.5" }}>
+                        {acceptedTranslations[message._id]
+                          ? acceptedTranslations[message._id].text
+                          : message.content}
+                      </div>
+                      {/* Accepted translation badge */}
+                      {acceptedTranslations[message._id] && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.25rem" }}>
+                          <span style={{ fontSize: "0.72rem", color: "#0369a1", background: "#e0f2fe", padding: "1px 6px", borderRadius: "10px", border: "1px solid #7dd3fc" }}>
+                            🌐 {acceptedTranslations[message._id].lang}
+                          </span>
+                          <button
+                            onClick={() => handleRevertTranslation(message._id)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.7rem" }}
+                          >Revert</button>
+                        </div>
+                      )}
+                      {/* Pending translation: Accept / Reject */}
+                      {pendingTranslations[message._id] && (
+                        <div style={{
+                          marginTop: "0.4rem",
+                          padding: "0.5rem 0.7rem",
+                          background: "#fffbeb",
+                          border: "1px solid #fcd34d",
+                          borderRadius: "8px",
+                          fontSize: "0.82rem",
+                          color: "#78350f",
+                        }}>
+                          <div style={{ fontStyle: "italic", marginBottom: "0.4rem" }}>
+                            [{pendingTranslations[message._id].lang}] {pendingTranslations[message._id].text}
+                          </div>
+                          <div style={{ display: "flex", gap: "0.4rem" }}>
+                            <button
+                              onClick={() => handleAcceptTranslation(message._id)}
+                              style={{ padding: "0.2rem 0.7rem", background: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.75rem", fontWeight: "600" }}
+                            >✓ Accept</button>
+                            <button
+                              onClick={() => handleRejectTranslation(message._id)}
+                              style={{ padding: "0.2rem 0.7rem", background: "#dc2626", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.75rem", fontWeight: "600" }}
+                            >✕ Reject</button>
+                          </div>
+                        </div>
+                      )}
+                      {/* AI action buttons per message */}
+                      <div style={{ display: "flex", gap: "0.3rem", marginTop: "0.4rem", flexWrap: "wrap" }}>
+                        {/* Translate dropdown */}
+                        <div style={{ position: "relative" }}>
+                          <button
+                            onClick={() => setShowTranslateFor(showTranslateFor === message._id ? null : message._id)}
+                            title="Translate this message"
+                            style={{
+                              padding: "0.2rem 0.5rem",
+                              background: "#e0f2fe",
+                              border: "1px solid #7dd3fc",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              fontSize: "0.7rem",
+                              color: "#0369a1",
+                              fontWeight: "600",
+                            }}
+                          >
+                            🌐 Translate
+                          </button>
+                          {showTranslateFor === message._id && (
+                            <div style={{
+                              position: "absolute",
+                              top: "100%",
+                              left: 0,
+                              zIndex: 200,
+                              background: CARD,
+                              border: `1px solid ${BORDER}`,
+                              borderRadius: "10px",
+                              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                              overflow: "hidden",
+                              minWidth: "130px",
+                              marginTop: "2px",
+                            }}>
+                              {["English", "Hindi", "Spanish", "French", "German", "Chinese", "Arabic", "Japanese"].map((lang) => (
+                                <button
+                                  key={lang}
+                                  onClick={() => handleTranslate(message._id, message.content, lang)}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "0.4rem 0.8rem",
+                                    background: "none",
+                                    border: "none",
+                                    borderBottom: `1px solid ${BORDER}`,
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    fontSize: "0.82rem",
+                                    color: TEXT,
+                                  }}
+                                >
+                                  {lang}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1015,34 +1278,142 @@ function Chat() {
 
             <div
               style={{
-                padding: "1rem 1.5rem",
+                padding: "0.6rem 1.5rem 1rem",
                 background: CARD,
                 boxShadow: "none",
                 borderTop: `1px solid ${BORDER}`,
               }}
             >
+              {/* AI Toolbar: Tone Rewrite */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <span style={{ fontSize: "0.72rem", color: SUBTEXT, fontWeight: "600" }}>AI Tools:</span>
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setShowToneMenu(!showToneMenu)}
+                    disabled={toneLoading}
+                    style={{
+                      padding: "0.25rem 0.7rem",
+                      background: showToneMenu ? "#fef3c7" : "#f9fafb",
+                      border: `1px solid ${showToneMenu ? "#fbbf24" : BORDER}`,
+                      borderRadius: "20px",
+                      cursor: toneLoading ? "not-allowed" : "pointer",
+                      fontSize: "0.75rem",
+                      color: "#92400e",
+                      fontWeight: "600",
+                    }}
+                  >
+                    {toneLoading ? "Rewriting..." : "✨ Rewrite Tone ▾"}
+                  </button>
+                  {showToneMenu && (
+                    <div style={{
+                      position: "absolute",
+                      bottom: "110%",
+                      left: 0,
+                      zIndex: 300,
+                      background: CARD,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: "12px",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+                      overflow: "hidden",
+                      minWidth: "150px",
+                    }}>
+                      {[
+                        { label: "🎩 Formal", tone: "formal" },
+                        { label: "😊 Friendly", tone: "friendly" },
+                        { label: "✂️ Concise", tone: "concise" },
+                        { label: "💼 Professional", tone: "professional" },
+                      ].map(({ label, tone }) => (
+                        <button
+                          key={tone}
+                          onClick={() => handleToneRewrite(tone)}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            padding: "0.5rem 0.9rem",
+                            background: "none",
+                            border: "none",
+                            borderBottom: `1px solid ${BORDER}`,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            fontSize: "0.85rem",
+                            color: TEXT,
+                            fontWeight: "500",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontSize: "0.7rem", color: "#9ca3af" }}>
+                  Tip: type <code style={{ background: "#f3f4f6", padding: "1px 4px", borderRadius: "3px" }}>@ai your question</code> to ask AI inline
+                </span>
+              </div>
+
               <form
                 onSubmit={handleSendMessage}
                 style={{ display: "flex", gap: "0.6rem" }}
               >
-                <input
-                  type="text"
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  placeholder={`Message #${activeChannel.name}`}
-                  onFocus={(e) => (e.target.style.border = "1px solid #2f855a")}
-                  onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: "14px",
-                    border: "1px solid #d1d5db",
-                    background: "#ffffff",
-                    color: TEXT,
-                    boxShadow: "none",
-                    outline: "none",
-                  }}
-                />
+                {/* Inline autocomplete suggestion bar */}
+                <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
+                  {(typingSuggestion || suggestionLoading) && (
+                    <div style={{
+                      position: "absolute",
+                      bottom: "110%",
+                      left: 0,
+                      right: 0,
+                      background: "#f8faff",
+                      border: "1px solid #c7d2fe",
+                      borderRadius: "10px",
+                      padding: "0.4rem 0.8rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      boxShadow: "0 2px 8px rgba(99,102,241,0.1)",
+                      zIndex: 100,
+                    }}>
+                      <span style={{ fontSize: "0.82rem", color: suggestionLoading ? "#9ca3af" : "#4338ca", fontStyle: suggestionLoading ? "italic" : "normal" }}>
+                        💡 {suggestionLoading ? "Thinking..." : typingSuggestion}
+                      </span>
+                      {typingSuggestion && !suggestionLoading && (
+                        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexShrink: 0 }}>
+                          <kbd style={{ background: "#e0e7ff", border: "1px solid #c7d2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "0.7rem", color: "#4338ca", cursor: "pointer" }}
+                            onClick={() => { setMessageText(typingSuggestion); setTypingSuggestion(""); }}
+                          >Tab ↵</kbd>
+                          <button onClick={() => setTypingSuggestion("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.7rem", padding: 0 }}>✕</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={(e) => { setMessageText(e.target.value); setTypingSuggestion(""); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && typingSuggestion) {
+                        e.preventDefault();
+                        setMessageText(typingSuggestion);
+                        setTypingSuggestion("");
+                      }
+                      if (e.key === "Escape") setTypingSuggestion("");
+                    }}
+                    placeholder={`Message #${activeChannel.name}`}
+                    onFocus={(e) => (e.target.style.border = "1px solid #2f855a")}
+                    onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: "14px",
+                      border: "1px solid #d1d5db",
+                      background: "#ffffff",
+                      color: TEXT,
+                      boxShadow: "none",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={loading || !messageText.trim()}
