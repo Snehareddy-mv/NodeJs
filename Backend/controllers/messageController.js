@@ -175,10 +175,9 @@ const askAI = asyncHandler(async (req, res) => {
   });
   }
 
-  const aiResponse = await aiService.generateResponse(
-    userPrompt,
-    conversationHistory,
-  );
+  const aiResponse = silent
+    ? await aiService.generateUtilityResponse(userPrompt)
+    : await aiService.generateResponse(userPrompt, conversationHistory);
 
   console.log("✅ AI Response generated:", aiResponse.substring(0, 100));
 

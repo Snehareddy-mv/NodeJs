@@ -68,6 +68,7 @@ function Chat() {
   const [aiHistory, setAiHistory] = useState([]);
 
   const aiHistoryEndRef = useRef(null);
+  const suggestionJustAccepted = useRef(false);
 
   // Inline autocomplete states
   const [typingSuggestion, setTypingSuggestion] = useState("");
@@ -507,6 +508,10 @@ function Chat() {
 
   // Debounced inline autocomplete: triggers 800ms after user stops typing
   useEffect(() => {
+    if (suggestionJustAccepted.current) {
+      suggestionJustAccepted.current = false;
+      return;
+    }
     if (messageText.length < 3 || !activeChannel) {
       setTypingSuggestion("");
       return;
@@ -515,8 +520,8 @@ function Chat() {
       setSuggestionLoading(true);
       try {
         const response = await messageAPI.askAI(
-          `Complete this chat message naturally. Reply ONLY with the full completed message (max 15 words total, do not add quotes): ${messageText}`,
-          activeChannel?._id,
+          `Complete this partial chat message that a user is typing. Return ONLY the completed message text (max 15 words, no quotes, no names, no greetings, continue in the same person's voice and intent): "${messageText}"`,
+          null,
           true,
         );
         const suggestion = response.data.data.content?.trim().replace(/^"|"$/g, "") || "";
@@ -1361,48 +1366,46 @@ function Chat() {
                 </span>
               </div>
 
+              {/* Inline autocomplete suggestion bar */}
+              {(typingSuggestion || suggestionLoading) && (
+                <div style={{
+                  marginBottom: "0.5rem",
+                  background: "#f8faff",
+                  border: "1px solid #c7d2fe",
+                  borderRadius: "10px",
+                  padding: "0.4rem 0.8rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  boxShadow: "0 2px 8px rgba(99,102,241,0.1)",
+                }}>
+                  <span style={{ fontSize: "0.82rem", color: suggestionLoading ? "#9ca3af" : "#4338ca", fontStyle: suggestionLoading ? "italic" : "normal" }}>
+                    💡 {suggestionLoading ? "Thinking..." : typingSuggestion}
+                  </span>
+                  {typingSuggestion && !suggestionLoading && (
+                    <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexShrink: 0 }}>
+                      <kbd
+                        style={{ background: "#e0e7ff", border: "1px solid #c7d2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "0.7rem", color: "#4338ca", cursor: "pointer" }}
+                        onClick={() => { suggestionJustAccepted.current = true; setMessageText(typingSuggestion); setTypingSuggestion(""); }}
+                      >Tab</kbd>
+                      <button onClick={() => setTypingSuggestion("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.7rem", padding: 0 }}>✕</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <form
                 onSubmit={handleSendMessage}
                 style={{ display: "flex", gap: "0.6rem" }}
               >
-                {/* Inline autocomplete suggestion bar */}
-                <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
-                  {(typingSuggestion || suggestionLoading) && (
-                    <div style={{
-                      position: "absolute",
-                      bottom: "110%",
-                      left: 0,
-                      right: 0,
-                      background: "#f8faff",
-                      border: "1px solid #c7d2fe",
-                      borderRadius: "10px",
-                      padding: "0.4rem 0.8rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      boxShadow: "0 2px 8px rgba(99,102,241,0.1)",
-                      zIndex: 100,
-                    }}>
-                      <span style={{ fontSize: "0.82rem", color: suggestionLoading ? "#9ca3af" : "#4338ca", fontStyle: suggestionLoading ? "italic" : "normal" }}>
-                        💡 {suggestionLoading ? "Thinking..." : typingSuggestion}
-                      </span>
-                      {typingSuggestion && !suggestionLoading && (
-                        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexShrink: 0 }}>
-                          <kbd style={{ background: "#e0e7ff", border: "1px solid #c7d2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "0.7rem", color: "#4338ca", cursor: "pointer" }}
-                            onClick={() => { setMessageText(typingSuggestion); setTypingSuggestion(""); }}
-                          >Tab ↵</kbd>
-                          <button onClick={() => setTypingSuggestion("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.7rem", padding: 0 }}>✕</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <input
+                <input
                     type="text"
                     value={messageText}
                     onChange={(e) => { setMessageText(e.target.value); setTypingSuggestion(""); }}
                     onKeyDown={(e) => {
                       if (e.key === "Tab" && typingSuggestion) {
                         e.preventDefault();
+                        suggestionJustAccepted.current = true;
                         setMessageText(typingSuggestion);
                         setTypingSuggestion("");
                       }
@@ -1412,7 +1415,7 @@ function Chat() {
                     onFocus={(e) => (e.target.style.border = "1px solid #2f855a")}
                     onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
                     style={{
-                      width: "100%",
+                      flex: 1,
                       padding: "12px",
                       borderRadius: "14px",
                       border: "1px solid #d1d5db",
@@ -1423,7 +1426,6 @@ function Chat() {
                       boxSizing: "border-box",
                     }}
                   />
-                </div>
                 <button
                   type="submit"
                   disabled={loading || !messageText.trim()}

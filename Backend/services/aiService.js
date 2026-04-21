@@ -117,6 +117,37 @@ Be friendly, conversational, and clear in your responses. Use simple terminology
     }
   },
 
+  // ✅ UTILITY (typing suggestion, tone rewrite, translation — no AI identity)
+  async generateUtilityResponse(prompt) {
+    try {
+      const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+      if (!OPENROUTER_API_KEY) throw new Error("Missing OpenRouter API Key");
+
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "meta-llama/llama-3-8b-instruct",
+          messages: [
+            { role: "system", content: "You are a text processing tool. Follow the user instruction exactly and return ONLY the requested text output. Do not introduce yourself, do not add explanations, do not use any name or persona." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 80,
+        }),
+      });
+
+      const data = await response.json();
+      return (data?.choices?.[0]?.message?.content || "").trim();
+    } catch (error) {
+      console.error("Utility LLM Error:", error.message);
+      return "";
+    }
+  },
+
   // ✅ SUMMARY
   async summarizeConversation(messages) {
     try {
