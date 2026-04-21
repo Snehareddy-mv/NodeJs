@@ -68,11 +68,10 @@ function Chat() {
   const [aiHistory, setAiHistory] = useState([]);
 
   const aiHistoryEndRef = useRef(null);
-  const suggestionJustAccepted = useRef(false);
 
-  // Inline autocomplete states
-  const [typingSuggestion, setTypingSuggestion] = useState("");
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  // Smart reply states (triggered by last received message)
+  const [smartReplies, setSmartReplies] = useState([]);
+  const [smartRepliesLoading, setSmartRepliesLoading] = useState(false);
 
   // Tone Rewrite states
   const [showToneMenu, setShowToneMenu] = useState(false);
@@ -220,9 +219,20 @@ function Chat() {
     }
   };
 
+  const handleSendSmartReply = (text) => {
+    if (!activeChannel || !text.trim()) return;
+    setSmartReplies([]);
+    socketService.sendMessage({
+      content: text,
+      channelId: activeChannel._id,
+      messageType: "text",
+    });
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageText.trim() || !activeChannel) return;
+    setSmartReplies([]);
 
     // Route @ai or /ask to the AI assistant
     const aiMatch = messageText.trim().match(/^(@ai|\/ask)\s+([\s\S]+)/i);
@@ -506,36 +516,36 @@ function Chat() {
     aiHistoryEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [aiHistory, aiLoading]);
 
-  // Debounced inline autocomplete: triggers 800ms after user stops typing
+  // Smart replies: generate 2-3 quick replies when a new message arrives from another user
   useEffect(() => {
-    if (suggestionJustAccepted.current) {
-      suggestionJustAccepted.current = false;
+    const lastMsg = messages.length ? messages[messages.length - 1] : null;
+    if (!lastMsg || !activeChannel) {
+      setSmartReplies([]);
       return;
     }
-    if (messageText.length < 3 || !activeChannel) {
-      setTypingSuggestion("");
+    const senderId = lastMsg.sender?._id || lastMsg.sender;
+    const isOwnMessage = String(senderId) === String(user?.id);
+    if (isOwnMessage) {
+      setSmartReplies([]);
       return;
     }
-    const timer = setTimeout(async () => {
-      setSuggestionLoading(true);
+    setSmartRepliesLoading(true);
+    setSmartReplies([]);
+    let cancelled = false;
+    messageAPI.askAI(
+      `Given this incoming chat message: "${lastMsg.content}"\nGenerate exactly 3 short, natural reply options (max 8 words each). Return ONLY a valid JSON array of 3 strings, nothing else. Example: ["Sure!", "Let me check.", "I'll get back to you."]`,
+      null,
+      true,
+    ).then((response) => {
+      if (cancelled) return;
+      const raw = response.data.data.content?.trim() || "[]";
       try {
-        const response = await messageAPI.askAI(
-          `Complete this partial chat message that a user is typing. Return ONLY the completed message text (max 15 words, no quotes, no names, no greetings, continue in the same person's voice and intent): "${messageText}"`,
-          null,
-          true,
-        );
-        const suggestion = response.data.data.content?.trim().replace(/^"|"$/g, "") || "";
-        if (suggestion && suggestion.toLowerCase() !== messageText.toLowerCase()) {
-          setTypingSuggestion(suggestion);
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setSuggestionLoading(false);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [messageText, activeChannel]);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setSmartReplies(parsed.slice(0, 3).filter(Boolean));
+      } catch {}
+    }).catch(() => {}).finally(() => { if (!cancelled) setSmartRepliesLoading(false); });
+    return () => { cancelled = true; };
+  }, [messages[messages.length - 1]?._id, activeChannel?._id]);
 
   const handleLogout = () => {
     socketService.disconnect();
@@ -1366,29 +1376,68 @@ function Chat() {
                 </span>
               </div>
 
-              {/* Inline autocomplete suggestion bar */}
-              {(typingSuggestion || suggestionLoading) && (
-                <div style={{
-                  marginBottom: "0.5rem",
-                  background: "#f8faff",
-                  border: "1px solid #c7d2fe",
-                  borderRadius: "10px",
-                  padding: "0.4rem 0.8rem",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  boxShadow: "0 2px 8px rgba(99,102,241,0.1)",
-                }}>
-                  <span style={{ fontSize: "0.82rem", color: suggestionLoading ? "#9ca3af" : "#4338ca", fontStyle: suggestionLoading ? "italic" : "normal" }}>
-                    💡 {suggestionLoading ? "Thinking..." : typingSuggestion}
-                  </span>
-                  {typingSuggestion && !suggestionLoading && (
-                    <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexShrink: 0 }}>
-                      <kbd
-                        style={{ background: "#e0e7ff", border: "1px solid #c7d2fe", borderRadius: "4px", padding: "1px 6px", fontSize: "0.7rem", color: "#4338ca", cursor: "pointer" }}
-                        onClick={() => { suggestionJustAccepted.current = true; setMessageText(typingSuggestion); setTypingSuggestion(""); }}
-                      >Tab</kbd>
-                      <button onClick={() => setTypingSuggestion("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.7rem", padding: 0 }}>✕</button>
+              {/* Smart replies: clickable chips based on last received message */}
+              {(smartReplies.length > 0 || smartRepliesLoading) && (
+                <div style={{ marginBottom: "0.5rem" }}>
+                  {smartRepliesLoading ? (
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600" }}>Generating replies...</span>
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} style={{ height: "28px", width: "80px", background: "#e0e7ff", borderRadius: "20px", opacity: 0.5 }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: "600", flexShrink: 0 }}>Quick reply:</span>
+                      {smartReplies.map((reply, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            background: "#eef2ff",
+                            border: "1px solid #c7d2fe",
+                            borderRadius: "20px",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <button
+                            onClick={() => handleSendSmartReply(reply)}
+                            title="Click to send"
+                            style={{
+                              padding: "0.3rem 0.75rem",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              color: "#3730a3",
+                              fontWeight: "500",
+                            }}
+                          >
+                            {reply}
+                          </button>
+                          <button
+                            onClick={() => { setMessageText(reply); setSmartReplies([]); }}
+                            title="Edit before sending"
+                            style={{
+                              padding: "0.3rem 0.55rem",
+                              background: "none",
+                              border: "none",
+                              borderLeft: "1px solid #c7d2fe",
+                              cursor: "pointer",
+                              fontSize: "0.72rem",
+                              color: "#6366f1",
+                            }}
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setSmartReplies([])}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "0.75rem", padding: "0 0.2rem" }}
+                        title="Dismiss"
+                      >✕</button>
                     </div>
                   )}
                 </div>
@@ -1401,16 +1450,7 @@ function Chat() {
                 <input
                     type="text"
                     value={messageText}
-                    onChange={(e) => { setMessageText(e.target.value); setTypingSuggestion(""); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && typingSuggestion) {
-                        e.preventDefault();
-                        suggestionJustAccepted.current = true;
-                        setMessageText(typingSuggestion);
-                        setTypingSuggestion("");
-                      }
-                      if (e.key === "Escape") setTypingSuggestion("");
-                    }}
+                    onChange={(e) => setMessageText(e.target.value)}
                     placeholder={`Message #${activeChannel.name}`}
                     onFocus={(e) => (e.target.style.border = "1px solid #2f855a")}
                     onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
