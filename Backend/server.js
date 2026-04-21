@@ -24,6 +24,7 @@ const io = new Server(server, {
   },
 });
 
+app.set("io", io);
 socketHandler(io);
 
 mongoose

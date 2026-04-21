@@ -60,7 +60,7 @@ export const messageAPI = {
     api.get(`/messages/channel/${channelId}?page=${page}&limit=${limit}`),
   getDirectMessages: (userId, page = 1, limit = 50) =>
     api.get(`/messages/direct/${userId}?page=${page}&limit=${limit}`),
-  askAI: (prompt, channelId) => api.post("/messages/ai", { prompt, channelId }),
+  askAI: (prompt, channelId, silent = false) => api.post("/messages/ai", { prompt, channelId, silent }),
   summarize: (channelId) => api.get(`/messages/summarize/${channelId}`),
   smartReply: (messageId) => api.get(`/messages/smart-reply/${messageId}`),
   delete: (id) => api.delete(`/messages/${id}`),

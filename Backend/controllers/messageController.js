@@ -130,7 +130,7 @@ const getDirectMessages = asyncHandler(async (req, res) => {
 });
 
 const askAI = asyncHandler(async (req, res) => {
-  const { prompt, question, channelId } = req.body;
+  const { prompt, question, channelId, silent } = req.body;
   const userId = req.currentUser.id;
 
   const userPrompt = prompt || question;
@@ -182,6 +182,15 @@ const askAI = asyncHandler(async (req, res) => {
 
   console.log("✅ AI Response generated:", aiResponse.substring(0, 100));
 
+  // Silent mode: utility calls (translate, tone, autocomplete) — no DB save, no socket emit
+  if (silent) {
+    return res.status(200).json({
+      success: true,
+      message: "AI response generated successfully",
+      data: { content: aiResponse },
+    });
+  }
+
   const aiMessage = await Message.create({
     content: aiResponse,
     sender: userId,
@@ -193,13 +202,10 @@ const askAI = asyncHandler(async (req, res) => {
   await aiMessage.populate("sender", "name email profileImage");
 
   console.log("✅ AI Message saved to DB:", aiMessage._id);
-  console.log("✅ Sending response to frontend...");
 
-  // Emit the AI message via Socket.io for real-time update
   const io = req.app.get("io");
   if (io && channelId) {
-    console.log("✅ Emitting AI message via Socket.io to channel:", channelId);
-    io.to(channelId).emit("message:new", aiMessage);
+    io.to(`channel:${channelId}`).emit("message:new", aiMessage);
   }
 
   res.status(200).json({

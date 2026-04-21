@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useStore from "../store/useStore";
 import socketService from "../services/socket";
@@ -66,6 +66,8 @@ function Chat() {
   const [aiResponse, setAiResponse] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiHistory, setAiHistory] = useState([]);
+
+  const aiHistoryEndRef = useRef(null);
 
   // Inline autocomplete states
   const [typingSuggestion, setTypingSuggestion] = useState("");
@@ -392,7 +394,7 @@ function Chat() {
       console.log("AI Response:", response.data);
 
       // The AI response is in response.data.data.content
-      const aiMessage = response.data.data.content;
+      const aiMessage = response.data.data?.content || response.data.data || "No response";
 
       // Add AI response to history
       setAiHistory([...newHistory, { role: "assistant", content: aiMessage }]);
@@ -415,7 +417,7 @@ function Chat() {
       const newHistory = [...aiHistory, { role: "user", content: prompt }];
       setAiHistory(newHistory);
       const response = await messageAPI.askAI(prompt, activeChannel?._id);
-      const aiMessage = response.data.data.content;
+      const aiMessage = response.data.data?.content || response.data.data || "No response";
       setAiHistory([...newHistory, { role: "assistant", content: aiMessage }]);
     } catch (error) {
       console.error("AI error:", error);
@@ -437,6 +439,7 @@ function Chat() {
       const response = await messageAPI.askAI(
         `Rewrite this message in a ${tone} tone. Respond with ONLY the rewritten message, no explanation: "${messageText}"`,
         activeChannel?._id,
+        true,
       );
       setMessageText(response.data.data.content);
     } catch (error) {
@@ -454,6 +457,7 @@ function Chat() {
       const response = await messageAPI.askAI(
         `Translate this message to ${lang}. Respond with ONLY the translated text, nothing else: "${content}"`,
         activeChannel?._id,
+        true,
       );
       setPendingTranslations((prev) => ({
         ...prev,
@@ -496,6 +500,11 @@ function Chat() {
     );
   };
 
+  // Auto-scroll AI chat to bottom when history updates
+  useEffect(() => {
+    aiHistoryEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiHistory, aiLoading]);
+
   // Debounced inline autocomplete: triggers 800ms after user stops typing
   useEffect(() => {
     if (messageText.length < 3 || !activeChannel) {
@@ -508,6 +517,7 @@ function Chat() {
         const response = await messageAPI.askAI(
           `Complete this chat message naturally. Reply ONLY with the full completed message (max 15 words total, do not add quotes): ${messageText}`,
           activeChannel?._id,
+          true,
         );
         const suggestion = response.data.data.content?.trim().replace(/^"|"$/g, "") || "";
         if (suggestion && suggestion.toLowerCase() !== messageText.toLowerCase()) {
@@ -1915,6 +1925,7 @@ function Chat() {
                   </div>
                 ))
               )}
+              <div ref={aiHistoryEndRef} />
               {aiLoading && (
                 <div
                   style={{
