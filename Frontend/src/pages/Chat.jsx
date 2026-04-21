@@ -202,7 +202,7 @@ function Chat() {
       setShowCreateChannel(false);
       toast.success("Channel created!");
     } catch (error) {
-      toast.error("Failed to create channel");
+      toast.error(error.response?.data?.message || "Failed to create channel");
     }
   };
 
