@@ -723,7 +723,10 @@ function Chat() {
                 </div>
                 <div style={{ display: "flex", gap: "0.6rem" }}>
                   <button
-                    onClick={() => setShowAIChat(true)}
+                    onClick={() => {
+                      setShowSearch(false);
+                      setShowAIChat(true);
+                    }}
                     style={{
                       padding: "0.5rem 1rem",
                       background: "linear-gradient(135deg, #2f855a, #22543d)",
@@ -784,7 +787,10 @@ function Chat() {
                     🔍 Search
                   </button>
                   <button
-                    onClick={handleCreateInviteCode}
+                    onClick={() => {
+                      setShowSearch(false);
+                      handleCreateInviteCode();
+                    }}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.background = "#f3f4f6")
                     }
