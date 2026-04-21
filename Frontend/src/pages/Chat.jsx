@@ -977,7 +977,7 @@ function Chat() {
                         onClick={() => handleEditMessage(message._id)}
                         style={{
                           padding: "0.5rem 0.8rem",
-                          background: ACCENT,
+                          background: "#2f855a",
                           color: "white",
                           border: "none",
                           borderRadius: "8px",
