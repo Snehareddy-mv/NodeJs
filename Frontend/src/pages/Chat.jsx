@@ -69,6 +69,7 @@ function Chat() {
   const [aiHistory, setAiHistory] = useState([]);
 
   const aiHistoryEndRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
   // Smart reply states (triggered by last received message)
   const [smartReplies, setSmartReplies] = useState([]);
@@ -101,23 +102,24 @@ function Chat() {
 
   useEffect(() => {
     const handleNewMessage = (message) => {
-      console.log("📨 New message received:", message);
-
       const messageChannelId =
         typeof message.channel === "object"
           ? message.channel._id
           : message.channel;
       const currentChannelId = activeChannel?._id;
 
-      console.log("Message channel ID:", messageChannelId);
-      console.log("Current channel ID:", currentChannelId);
+      if (messageChannelId !== currentChannelId) return;
 
-      if (messageChannelId === currentChannelId) {
-        console.log("✅ Adding message to UI");
-        addMessage(message);
-      } else {
-        console.log("❌ Message not for current channel, ignoring");
-      }
+      // Remove optimistic placeholder if present
+      const currentMsgs = useStore.getState().messages;
+      const senderId = message.sender?._id || message.sender;
+      const tempMsg = currentMsgs.find(
+        (m) => m.isOptimistic && m.content === message.content &&
+          (m.sender?._id === senderId || m.sender?.id === senderId)
+      );
+      if (tempMsg) deleteMessage(tempMsg._id);
+
+      addMessage(message);
     };
 
     const handleMessageEdited = (message) => {
@@ -251,10 +253,24 @@ function Chat() {
 
     const messageContent = messageText;
     const replyToId = replyingTo?._id;
+    const currentReplyingTo = replyingTo;
     setMessageText("");
     setReplyingTo(null);
-    setLoading(true);
 
+    // Optimistic update — show message instantly
+    const tempId = `temp_${Date.now()}`;
+    addMessage({
+      _id: tempId,
+      content: messageContent,
+      sender: user,
+      channel: activeChannel,
+      messageType: "text",
+      replyTo: currentReplyingTo || null,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true,
+    });
+
+    setLoading(true);
     try {
       socketService.sendMessage({
         content: messageContent,
@@ -264,6 +280,7 @@ function Chat() {
       });
     } catch (error) {
       toast.error("Failed to send message");
+      deleteMessage(tempId);
     } finally {
       setLoading(false);
     }
@@ -523,6 +540,11 @@ function Chat() {
   useEffect(() => {
     aiHistoryEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [aiHistory, aiLoading]);
+
+  // Auto-scroll chat to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Smart replies: generate 2-3 quick replies when a new message arrives from another user
   useEffect(() => {
@@ -1031,7 +1053,7 @@ function Chat() {
               )}
             </div>
 
-            <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.5rem" }}>
+            <div className="hide-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "1rem 1.5rem" }}>
               {messages.map((message) => (
                 <div
                   key={message._id}
@@ -1322,6 +1344,7 @@ function Chat() {
                   )}
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
 
             <div

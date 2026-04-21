@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 const useStore = create((set, get) => ({
-  user: JSON.parse(localStorage.getItem('user')) || null,
-  accessToken: localStorage.getItem('accessToken') || null,
+  user: JSON.parse(sessionStorage.getItem('user')) || null,
+  accessToken: sessionStorage.getItem('accessToken') || null,
   
   channels: [],
   activeChannel: null,
@@ -13,19 +13,19 @@ const useStore = create((set, get) => ({
   typingUsers: new Set(),
 
   setUser: (user) => {
-    localStorage.setItem('user', JSON.stringify(user));
+    sessionStorage.setItem('user', JSON.stringify(user));
     set({ user });
   },
 
   setAccessToken: (token) => {
-    localStorage.setItem('accessToken', token);
+    sessionStorage.setItem('accessToken', token);
     set({ accessToken: token });
   },
 
   logout: () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('accessToken');
-    set({ user: null, accessToken: null, channels: [], messages: [] });
+    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('accessToken');
+    set({ user: null, accessToken: null, channels: [], messages: [], activeChannel: null });
   },
 
   setChannels: (channels) => set({ channels }),
