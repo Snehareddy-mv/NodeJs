@@ -11,9 +11,14 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production'
-      ? ['https://chat-ai-application-frontend.onrender.com', process.env.FRONTEND_URL]
-      : ["http://localhost:5173", "http://localhost:3000"],
+    origin:
+      process.env.NODE_ENV === "production"
+        ? [
+            "https://chat-ai-application-frontend.onrender.com",
+            "https://node-js-seven-orcin.vercel.app",
+            process.env.FRONTEND_URL,
+          ].filter((url) => url) // Remove undefined values
+        : ["http://localhost:5173", "http://localhost:3000"],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -21,7 +26,8 @@ const io = new Server(server, {
 
 socketHandler(io);
 
-mongoose.connect(process.env.MONGO_URL)
+mongoose
+  .connect(process.env.MONGO_URL)
   .then(() => {
     console.log("DB Connected");
   })
